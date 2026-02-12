@@ -3,7 +3,6 @@ const path = require('path')
 const fetch = require('node-fetch')
 const v4 = require('uuid').v4
 const { getCountryData } = require('./utils')
-const open = require('open')
 
 require('dotenv').config()
 
@@ -14,7 +13,7 @@ const ACCOUNT_CODE = process.env.ACCOUNT_CODE
 const PUBLIC_API_KEY = process.env.PUBLIC_API_KEY
 const PRIVATE_SECRET_KEY = process.env.PRIVATE_SECRET_KEY
 
-const SERVER_PORT = 8080
+const SERVER_PORT = process.env.PORT || 8080
 
 let CUSTOMER_ID
 
@@ -529,7 +528,6 @@ app.listen(SERVER_PORT, async () => {
 
   CUSTOMER_ID = await createCustomer().then(({ id }) => id)
 
-  await open(`http://localhost:${SERVER_PORT}`);
 })
 
 const ApiKeyPrefixToEnvironmentSuffix = {
