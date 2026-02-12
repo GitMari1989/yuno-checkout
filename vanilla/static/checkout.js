@@ -13,7 +13,7 @@ async function initCheckout() {
    * checkout configuration
    */
 
-  const loader = document.getElementById('loader')
+  const loader = document.getElementById('loader') || { style: { display: 'none' } }
   let isPaying = false
 
   await yuno.startCheckout({
