@@ -1,19 +1,43 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Yuno Checkout</title>
 
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter">
-  <link rel="stylesheet" href="../static/styles.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter" />
+  <link rel="stylesheet" href="../static/styles.css" />
 
   <style>
-    #root{
+    body {
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      padding: 24px 12px;
+    }
+
+    #root {
       min-height: 600px;
       width: 100%;
       max-width: 500px;
-      margin: 24px auto;
+      margin: 0 auto;
+    }
+
+    .controls {
+      width: 100%;
+      max-width: 500px;
+      margin: 16px auto 0;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      align-items: stretch;
+    }
+
+    #debug {
+      white-space: pre-wrap;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      min-height: 80px;
+      background: #fafafa;
     }
   </style>
 </head>
@@ -21,18 +45,18 @@
 <body>
   <div id="loader" style="display:none;">Loading...</div>
 
-  <!-- ✅ ESTE É O CONTAINER DO SDK -->
+  <!-- ✅ CONTAINER ONDE O SDK RENDERIZA O CHECKOUT -->
   <div id="root"></div>
 
-  <button id="button-pay">Pagar Ahora</button>
+  <div class="controls">
+    <button id="button-pay" type="button">Pagar Ahora</button>
+    <pre id="debug"></pre>
+  </div>
 
-  <pre id="debug" style="white-space:pre-wrap; padding:12px; border:1px solid #ddd; margin-top:12px;"></pre>
-
-  <!-- SDK primeiro -->
+  <!-- ✅ SDK primeiro (sem defer) -->
   <script src="https://sdk-web.y.uno/v1.5/main.js"></script>
 
-  <!-- Depois seu código -->
+  <!-- ✅ Depois seu código -->
   <script type="module" src="../static/checkout.js"></script>
 </body>
 </html>
-

@@ -1,7 +1,13 @@
 // vanilla/static/checkout.js
 import { getCheckoutSession, createPayment, getPublicApiKey } from "./api.js"
 
+let __started = false
+
 async function initCheckout() {
+  // ✅ evita inicializar duas vezes (muito comum no Render + reload)
+  if (__started) return
+  __started = true
+
   const debugEl = document.getElementById("debug")
 
   const log = (x) => {
@@ -17,6 +23,7 @@ async function initCheckout() {
     // 1) Create checkout session (backend)
     const { checkout_session: checkoutSession, country: countryCode } =
       await getCheckoutSession()
+
     log({ checkoutSession, countryCode })
 
     // 2) Get public key (backend)
@@ -29,25 +36,16 @@ async function initCheckout() {
 
     let isPaying = false
 
-    // 4) Start checkout in ELEMENT mode (avoid modal blockers)
+    // 4) Start checkout (SEM renderMode element, porque seu HTML não tem #form-element / #action-form-element)
     await yuno.startCheckout({
       checkoutSession,
       elementSelector: "#root",
       countryCode,
       language: "es",
 
-      // keep it stable for demo
+      // estável para demo
       showLoading: true,
       keepLoader: false,
-
-      // ✅ IMPORTANT: render inside the page, not a modal
-      renderMode: {
-        type: "element",
-        elementSelector: {
-          apmForm: "#form-element",
-          actionForm: "#action-form-element",
-        },
-      },
 
       async yunoCreatePayment(oneTimeToken) {
         try {
@@ -63,7 +61,7 @@ async function initCheckout() {
 
           log({ createPaymentResponse: paymentResp })
 
-          // Only continue if SDK explicitly requires it
+          // ✅ só chama continuePayment se o backend disser explicitamente
           if (paymentResp?.sdk_action_required === true) {
             log("SDK action required -> continuePayment()")
             yuno.continuePayment()
@@ -94,10 +92,15 @@ async function initCheckout() {
       },
     })
 
-    // ✅ In this flow, mountCheckout IS needed to render the payment methods list
-    yuno.mountCheckout()
-    log("CHECKOUT READY (mounted)")
+    // ✅ para Full Checkout, normalmente precisa do mountCheckout
+    if (typeof yuno.mountCheckout === "function") {
+      yuno.mountCheckout()
+      log("CHECKOUT READY (mounted)")
+    } else {
+      log("WARNING: yuno.mountCheckout() not available in this SDK version")
+    }
 
+    // Start payment only when user clicks
     const payButton = document.querySelector("#button-pay")
     if (payButton) {
       payButton.addEventListener("click", () => {
@@ -109,22 +112,38 @@ async function initCheckout() {
       log("WARNING: #button-pay not found")
     }
   } catch (err) {
+    __started = false // permite tentar de novo se falhar
     const msg = { initError: String(err), stack: err?.stack }
     console.log(msg)
     if (debugEl) debugEl.textContent += "\n" + JSON.stringify(msg, null, 2)
   }
 }
 
-// Boot (some environments don't fire yuno-sdk-ready reliably)
+// Boot seguro: chama uma vez só, quando o SDK estiver disponível
 function boot() {
-  const start = () => initCheckout()
-  if (window.Yuno?.initialize) start()
-  else {
-    window.addEventListener("yuno-sdk-ready", start, { once: true })
-    setTimeout(() => {
-      if (window.Yuno?.initialize) start()
-    }, 1500)
+  const startOnce = () => initCheckout()
+
+  if (window.Yuno?.initialize) {
+    startOnce()
+    return
   }
+
+  window.addEventListener("yuno-sdk-ready", startOnce, { once: true })
+
+  // fallback: aguarda o SDK aparecer, sem duplicar init (por causa do __started)
+  const t0 = Date.now()
+  const timer = setInterval(() => {
+    if (window.Yuno?.initialize) {
+      clearInterval(timer)
+      startOnce()
+      return
+    }
+    if (Date.now() - t0 > 8000) {
+      clearInterval(timer)
+      __started = false
+      console.log("SDK not available after 8s")
+    }
+  }, 250)
 }
 
 boot()
