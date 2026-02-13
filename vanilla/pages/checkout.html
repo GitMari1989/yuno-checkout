@@ -7,7 +7,7 @@
   <title>Yuno Checkout</title>
 
   <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter" />
-  <link rel="stylesheet" href="../static/styles.css" />
+  <link rel="stylesheet" href="/static/styles.css" />
 
   <style>
     body {
@@ -24,7 +24,7 @@
     }
 
     #root {
-      min-height: 640px;
+      min-height: 420px; /* ✅ menor para reduzir o espaço entre Tarjeta e botão */
       width: 100%;
       background: #fff;
       border-radius: 12px;
@@ -40,6 +40,11 @@
       border: 0;
       cursor: pointer;
       font-size: 16px;
+    }
+
+    #button-pay:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
     }
 
     /* DEBUG: fica embaixo, não cobre clique */
@@ -83,7 +88,6 @@
     <button id="button-pay" type="button" disabled>Pagar Ahora</button>
   </div>
 
-  <!-- Debug colapsável -->
   <details id="debug-panel" open>
     <summary>Debug (clique para abrir/fechar)</summary>
     <pre id="debug"></pre>
@@ -92,7 +96,7 @@
   <!-- SDK primeiro -->
   <script src="https://sdk-web.y.uno/v1.5/main.js"></script>
 
-  <!-- Depois seu código (SEM module; caminho absoluto do express /static) -->
-  <script src="/static/checkout.js"></script>
+  <!-- Depois seu código (COMO module, porque usa import) -->
+  <script type="module" src="/static/checkout.js"></script>
 </body>
 </html>

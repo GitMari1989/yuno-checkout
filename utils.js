@@ -1,15 +1,17 @@
-// utils.js
+// utils.js (na mesma pasta do server.js)
 exports.getCountryData = function getCountryData(country) {
   let countryData
 
+  // permite override sem redeploy de código:
+  // ex: CO_CURRENCY=COP
+  const CO_CURRENCY = process.env.CO_CURRENCY || "USD"
+
   if (country === "CO") {
-    // ✅ IMPORTANT: your Yuno account seems to have CARD enabled with Currency = USD
-    // so we align the demo session/payment to USD to make "Tarjeta" appear.
     countryData = {
       documentType: "CC",
       documentNumber: "1032765432",
-      currency: "USD",
-      amount: 2000, // keep same numeric value; adjust if your environment expects other minor units
+      currency: CO_CURRENCY,
+      amount: 2000,
     }
   } else if (country === "BR") {
     countryData = {
