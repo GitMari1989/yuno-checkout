@@ -1,5 +1,5 @@
 // vanilla/static/checkout.js
-import { getCheckoutSession, createPayment, getPublicApiKey } from "./api.js"
+import { getCheckoutSession, createPayment, getPublicApiKey, getPaymentMethods } from "./api.js"
 
 let __started = false
 
@@ -16,6 +16,8 @@ async function initCheckout() {
   }
 
   let isPaying = false
+  let allowPayment = false
+  let yuno = null
 
   try {
     log("INIT CHECKOUT START")
@@ -25,7 +27,7 @@ async function initCheckout() {
     const checkoutSession = sessionResp?.checkout_session
     const countryCode = sessionResp?.country || "CO"
 
-    log({ checkoutSession, countryCode })
+    log({ checkoutSession, countryCode, sessionResp })
 
     if (!checkoutSession) {
       log({ ERROR: "Missing checkout_session in /checkout/sessions response", sessionResp })
@@ -33,7 +35,25 @@ async function initCheckout() {
       return
     }
 
-    // 2) Get public key (backend)
+    // 2) Pre-check payment methods (if empty/blocked, SDK often shows error overlay)
+    try {
+      const pm = await getPaymentMethods(checkoutSession)
+      const count = Array.isArray(pm) ? pm.length : null
+      log({ paymentMethodsCount: count, paymentMethods: pm })
+
+      if (count === 0) {
+        log("STOP: checkout session has 0 payment methods (check dashboard rules: currency/country).")
+        __started = false
+        return
+      }
+    } catch (e) {
+      log({ paymentMethodsError: String(e), stack: e?.stack })
+      log("STOP: /payment-methods failed, not calling SDK.")
+      __started = false
+      return
+    }
+
+    // 3) Get public key (backend)
     const publicApiKey = await getPublicApiKey()
     log({ publicApiKeyPrefix: String(publicApiKey || "").split("_")[0] })
 
@@ -43,19 +63,18 @@ async function initCheckout() {
       return
     }
 
-    // 3) Ensure SDK loaded
+    // 4) Ensure SDK loaded
     if (!window.Yuno?.initialize) {
       log("ERROR: window.Yuno.initialize not available (SDK not loaded yet)")
       __started = false
       return
     }
 
-    // 4) Init SDK
-    const yuno = await window.Yuno.initialize(publicApiKey)
+    // 5) Init SDK
+    yuno = await window.Yuno.initialize(publicApiKey)
     log("YUNO INITIALIZED")
 
-    // 5) Start FULL checkout
-    // IMPORTANT: In FULL CHECKOUT do NOT call mountCheckout().
+    // 6) Start Checkout
     log("Calling yuno.startCheckout(...)")
 
     await yuno.startCheckout({
@@ -67,12 +86,17 @@ async function initCheckout() {
       showLoading: true,
       keepLoader: false,
 
-      // Modal is usually the most stable for Full Checkout
+      // Modal costuma ser mais estável
       renderMode: { type: "modal" },
 
-      // Called only when SDK generates token (after user action/flow)
       async yunoCreatePayment(oneTimeToken) {
         try {
+          // ✅ Nunca paga sem clique
+          if (!allowPayment) {
+            log("yunoCreatePayment called BEFORE click -> ignoring token")
+            return
+          }
+
           if (isPaying) return
           isPaying = true
 
@@ -82,7 +106,7 @@ async function initCheckout() {
           const paymentResp = await createPayment({ oneTimeToken, checkoutSession })
           log({ createPaymentResponse: paymentResp })
 
-          // Only continue if SDK explicitly requires it
+          // Só continua se o back disser que o SDK precisa
           if (paymentResp?.sdk_action_required === true) {
             log("SDK action required -> continuePayment()")
             yuno.continuePayment()
@@ -92,7 +116,10 @@ async function initCheckout() {
         } catch (err) {
           log({ createPaymentError: String(err), stack: err?.stack })
           try { yuno.hideLoader() } catch (_) {}
+        } finally {
+          // libera para tentar de novo se quiser
           isPaying = false
+          allowPayment = false
         }
       },
 
@@ -103,23 +130,34 @@ async function initCheckout() {
       yunoPaymentResult(data) {
         log({ yunoPaymentResult: data })
         isPaying = false
+        allowPayment = false
         try { yuno.hideLoader() } catch (_) {}
       },
 
       yunoError(error) {
         log({ yunoError: error })
         isPaying = false
+        allowPayment = false
         try { yuno.hideLoader() } catch (_) {}
       },
     })
 
-    log("CHECKOUT READY (startCheckout resolved)")
+    log("startCheckout resolved")
 
-    // 6) Pay button (only triggers payment on click)
+    // ✅ ESSENCIAL no seu caso: monta a lista no #root
+    if (typeof yuno.mountCheckout === "function") {
+      yuno.mountCheckout()
+      log("CHECKOUT MOUNTED (methods should render)")
+    } else {
+      log("WARNING: mountCheckout not available in this SDK version")
+    }
+
+    // 7) Pay button
     const payButton = document.querySelector("#button-pay")
     if (payButton) {
       payButton.addEventListener("click", () => {
         if (isPaying) return
+        allowPayment = true
         log("PAY BUTTON CLICK -> yuno.startPayment()")
         yuno.startPayment()
       })
