@@ -36,7 +36,7 @@ const app = express()
 
 app.use(express.json())
 
-// log simples para você ver no Render se /payments está sendo chamado sem clique
+// Log simples para você ver no Render
 app.use((req, res, next) => {
   console.log(`[REQ] ${req.method} ${req.originalUrl}`)
   next()
@@ -45,10 +45,31 @@ app.use((req, res, next) => {
 app.use('/static', express.static(staticDirectory))
 
 /**
- * Garante que:
- *  - API_URL existe
- *  - CUSTOMER_ID existe (cria se necessário)
- * Isso evita falhas no primeiro request após cold start do Render.
+ * Fetch helper: retorna status + json e loga erros
+ */
+async function fetchJson(url, options) {
+  const resp = await fetch(url, options)
+  const text = await resp.text()
+
+  let json = null
+  try {
+    json = text ? JSON.parse(text) : null
+  } catch (_) {
+    json = { raw: text }
+  }
+
+  if (!resp.ok) {
+    const err = new Error(`HTTP ${resp.status} ${resp.statusText} -> ${url}`)
+    err.status = resp.status
+    err.data = json
+    throw err
+  }
+
+  return json
+}
+
+/**
+ * Garante init (API_URL e CUSTOMER_ID) — importante para cold start do Render
  */
 async function ensureInit() {
   if (!INIT_PROMISE) {
@@ -60,14 +81,12 @@ async function ensureInit() {
       API_URL = generateBaseUrlApi()
       console.log('[INIT] API_URL:', API_URL)
 
-      // cria CUSTOMER_ID só uma vez
       const created = await createCustomer()
       CUSTOMER_ID = created?.id || null
       console.log('[INIT] CUSTOMER_ID:', CUSTOMER_ID)
 
       return true
     })().catch((err) => {
-      // se falhar, permite tentar de novo num próximo request
       INIT_PROMISE = null
       throw err
     })
@@ -75,6 +94,28 @@ async function ensureInit() {
 
   return INIT_PROMISE
 }
+
+/**
+ * Debug endpoints (pra garantir que o Render está rodando esse arquivo)
+ */
+app.get('/__whoami', (req, res) => {
+  res.json({
+    file: 'server.js',
+    hasPaymentMethodsRoute: true,
+    hasRoutesEndpoint: true,
+  })
+})
+
+app.get('/routes', (req, res) => {
+  const routes = []
+  app._router.stack.forEach((m) => {
+    if (m.route && m.route.path) {
+      const methods = Object.keys(m.route.methods || {}).join(',').toUpperCase()
+      routes.push({ methods, path: m.route.path })
+    }
+  })
+  res.json({ routes })
+})
 
 app.get('/sdk-web/healthy', (req, res) => {
   res.sendStatus(200)
@@ -132,6 +173,36 @@ app.get('/public-api-key', (req, res) => {
   res.json({ publicApiKey: PUBLIC_API_KEY })
 })
 
+/**
+ * ✅ CRÍTICO: rota que estava faltando
+ * O Full Checkout precisa conseguir buscar os métodos da session
+ */
+app.get('/payment-methods/:checkoutSession', async (req, res) => {
+  try {
+    await ensureInit()
+
+    const checkoutSession = req.params.checkoutSession
+    const url = `${API_URL}/v1/checkout/sessions/${checkoutSession}/payment-methods`
+
+    const data = await fetchJson(url, {
+      method: 'GET',
+      headers: {
+        'public-api-key': PUBLIC_API_KEY,
+        'private-secret-key': PRIVATE_SECRET_KEY,
+        'Content-Type': 'application/json',
+      },
+    })
+
+    return res.json(data)
+  } catch (err) {
+    console.log('[ERR] /payment-methods:', err?.message, err?.data || '')
+    return res.status(err?.status || 500).json({
+      error: String(err?.message || err),
+      data: err?.data || null,
+    })
+  }
+})
+
 app.post('/checkout/sessions', async (req, res) => {
   try {
     await ensureInit()
@@ -144,12 +215,11 @@ app.post('/checkout/sessions', async (req, res) => {
       merchant_order_id: '1655401222',
       payment_description: 'Test MP 1654536326',
       country,
-      // IMPORTANTE: só enviar customer_id se existir mesmo
       ...(CUSTOMER_ID ? { customer_id: CUSTOMER_ID } : {}),
       amount: { currency, value: 2000 },
     }
 
-    const response = await fetch(`${API_URL}/v1/checkout/sessions`, {
+    const response = await fetchJson(`${API_URL}/v1/checkout/sessions`, {
       method: 'POST',
       headers: {
         'public-api-key': PUBLIC_API_KEY,
@@ -157,12 +227,15 @@ app.post('/checkout/sessions', async (req, res) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
-    }).then((resp) => resp.json())
+    })
 
-    return res.send(response)
+    return res.json(response)
   } catch (err) {
-    console.log('[ERR] /checkout/sessions:', err)
-    return res.status(500).json({ error: String(err) })
+    console.log('[ERR] /checkout/sessions:', err?.message, err?.data || '')
+    return res.status(err?.status || 500).json({
+      error: String(err?.message || err),
+      data: err?.data || null,
+    })
   }
 })
 
@@ -175,7 +248,7 @@ app.post('/payments', async (req, res) => {
     const country = req.query.country || 'CO'
     const { currency, documentNumber, documentType, amount } = getCountryData(country)
 
-    const response = await fetch(`${API_URL}/v1/payments`, {
+    const response = await fetchJson(`${API_URL}/v1/payments`, {
       method: 'POST',
       headers: {
         'public-api-key': PUBLIC_API_KEY,
@@ -222,12 +295,15 @@ app.post('/payments', async (req, res) => {
         },
         payment_method: { token: oneTimeToken, vaulted_token: null },
       }),
-    }).then((resp) => resp.json())
+    })
 
     return res.json(response)
   } catch (err) {
-    console.log('[ERR] /payments:', err)
-    return res.status(500).json({ error: String(err) })
+    console.log('[ERR] /payments:', err?.message, err?.data || '')
+    return res.status(err?.status || 500).json({
+      error: String(err?.message || err),
+      data: err?.data || null,
+    })
   }
 })
 
@@ -251,7 +327,7 @@ function generateBaseUrlApi() {
 }
 
 function createCustomer() {
-  return fetch(`${API_URL}/v1/customers`, {
+  return fetchJson(`${API_URL}/v1/customers`, {
     method: 'POST',
     headers: {
       'public-api-key': PUBLIC_API_KEY,
@@ -265,5 +341,5 @@ function createCustomer() {
       last_name: 'Doe',
       email: 'john.doe@y.uno',
     }),
-  }).then((resp) => resp.json())
+  })
 }
