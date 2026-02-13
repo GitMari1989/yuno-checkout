@@ -23,36 +23,35 @@ async function initCheckout() {
   const setPayEnabled = (enabled, label) => {
     if (!payButton) return
     payButton.disabled = !enabled
-    payButton.textContent = label || (enabled ? "Pagar Ahora" : "Formulario no listo")
+    payButton.textContent = label || (enabled ? "Pagar Ahora" : "Procesando...")
   }
 
-  setPayEnabled(false, "Formulario no listo")
+  const finishUi = (label = "Pagar Ahora") => {
+    try {
+      // se o SDK estiver com loader aberto por algum motivo
+      if (yuno?.hideLoader) yuno.hideLoader()
+    } catch (_) {}
+    isPaying = false
+    setPayEnabled(true, label)
+  }
+
+  setPayEnabled(false, "Cargando...")
 
   let isPaying = false
   let yuno = null
   let checkoutSession = null
   let countryCode = "CO"
 
-  /**
-   * ✅ Detecção mais robusta: considera que o SDK pode renderizar
-   * inputs e/ou iframes dentro do #root (muito comum).
-   */
   const formLooksReady = () => {
     if (!rootEl) return false
-
-    // 1) iframes (secure fields geralmente são iframes)
     const iframes = rootEl.querySelectorAll("iframe")
-    if (iframes && iframes.length > 0) return true
-
-    // 2) inputs (alguns SDKs usam inputs normais)
+    if (iframes?.length) return true
     const inputs = rootEl.querySelectorAll("input, select, textarea")
-    if (inputs && inputs.length > 0) return true
-
-    // 3) fallback: algum elemento com "card"/"cvv"/"security" no id/class
-    const hints = rootEl.querySelectorAll('[id*="cvv"],[id*="card"],[class*="cvv"],[class*="card"],[class*="security"]')
-    if (hints && hints.length > 0) return true
-
-    return false
+    if (inputs?.length) return true
+    const hints = rootEl.querySelectorAll(
+      '[id*="cvv"],[id*="card"],[class*="cvv"],[class*="card"],[class*="security"]'
+    )
+    return !!hints?.length
   }
 
   function waitForFormReady({ timeoutMs = 12000 } = {}) {
@@ -80,12 +79,10 @@ async function initCheckout() {
     })
   }
 
-  let warnedOnce = false
-
   try {
     log("INIT CHECKOUT START")
 
-    // 1) Create checkout session (backend)
+    // 1) Create checkout session
     const sessionResp = await getCheckoutSession()
     checkoutSession = sessionResp?.checkout_session
     countryCode = sessionResp?.country || "CO"
@@ -95,6 +92,7 @@ async function initCheckout() {
     if (!checkoutSession) {
       log({ ERROR: "Missing checkout_session in /checkout/sessions response", sessionResp })
       __started = false
+      setPayEnabled(false, "Error")
       return
     }
 
@@ -105,6 +103,7 @@ async function initCheckout() {
     if (!publicApiKey) {
       log("ERROR: Missing publicApiKey from /public-api-key")
       __started = false
+      setPayEnabled(false, "Error")
       return
     }
 
@@ -112,6 +111,7 @@ async function initCheckout() {
     if (!window.Yuno?.initialize) {
       log("ERROR: window.Yuno.initialize not available (SDK not loaded yet)")
       __started = false
+      setPayEnabled(false, "Error")
       return
     }
 
@@ -140,60 +140,60 @@ async function initCheckout() {
           const paymentResp = await createPayment({ oneTimeToken, checkoutSession })
           log({ createPaymentResponse: paymentResp })
 
-          if (paymentResp?.sdk_action_required === true) {
+          const needsSdkAction = paymentResp?.checkout?.sdk_action_required === true
+            || paymentResp?.sdk_action_required === true
+
+          if (needsSdkAction) {
             log("SDK action required -> continuePayment()")
             yuno.continuePayment()
-          } else {
-            log("No SDK action required (skip continuePayment)")
+            // UI vai finalizar em yunoPaymentResult
+            return
           }
+
+          // ✅ CASO NORMAL (como o seu): pagamento SUCCEEDED e não precisa continuePayment
+          log("No SDK action required (skip continuePayment)")
+
+          // Finaliza UI agora (senão fica preso em 'Procesando...')
+          finishUi("Pago ✅")
+
+          // opcional: depois de 1.5s volta o botão ao normal
+          setTimeout(() => finishUi("Pagar Ahora"), 1500)
+
         } catch (err) {
           log({ createPaymentError: String(err), stack: err?.stack, data: err?.data })
-          try { yuno.hideLoader() } catch (_) {}
-          isPaying = false
-          setPayEnabled(true, "Pagar Ahora")
+          finishUi("Pagar Ahora")
         }
       },
 
       yunoPaymentMethodSelected(data) {
         log({ yunoPaymentMethodSelected: data })
 
-        // Quando seleciona método, espera o form renderizar e então habilita
         ;(async () => {
-          warnedOnce = false
           setPayEnabled(false, "Cargando formulario...")
-
           const ok = await waitForFormReady({ timeoutMs: 15000 })
           if (!ok) {
-            if (!warnedOnce) {
-              warnedOnce = true
-              log("WARNING: Form fields not found after selection (still waiting).")
-            }
-            // mantém disabled, mas deixa o texto claro
+            log("WARNING: Form not ready in DOM (still).")
             setPayEnabled(false, "Formulario no listo")
             return
           }
-
           setPayEnabled(true, "Pagar Ahora")
         })()
       },
 
       yunoPaymentResult(data) {
         log({ yunoPaymentResult: data })
-        isPaying = false
-        try { yuno.hideLoader() } catch (_) {}
-        setPayEnabled(true, "Pagar Ahora")
+        // Se o fluxo passou pelo continuePayment, finaliza aqui
+        finishUi("Pago ✅")
+        setTimeout(() => finishUi("Pagar Ahora"), 1500)
       },
 
       yunoError(error) {
         log({ yunoError: error })
-        isPaying = false
-        try { yuno.hideLoader() } catch (_) {}
-        // deixa tentar de novo
-        setPayEnabled(true, "Pagar Ahora")
+        finishUi("Pagar Ahora")
       },
     })
 
-    // 6) Mount (no seu caso é necessário pra aparecer Tarjeta)
+    // 6) Mount
     if (typeof yuno.mountCheckout === "function") {
       yuno.mountCheckout()
       log("CHECKOUT READY (mounted)")
@@ -206,12 +206,12 @@ async function initCheckout() {
       payButton.addEventListener("click", async () => {
         if (isPaying) return
 
-        // Proteção: garante que o form existe antes de startPayment
+        // garante que o form está no DOM antes do startPayment
         if (!formLooksReady()) {
           setPayEnabled(false, "Cargando formulario...")
           const ok = await waitForFormReady({ timeoutMs: 8000 })
           if (!ok) {
-            log("BLOCKED: Form still not ready in DOM. Not calling startPayment().")
+            log("BLOCKED: Form still not ready. Not calling startPayment().")
             setPayEnabled(false, "Formulario no listo")
             return
           }
@@ -224,13 +224,15 @@ async function initCheckout() {
       })
 
       log("Pay button listener attached")
+      // já deixa clicável assim que a lista estiver pronta (o Selected habilita de vez)
+      setPayEnabled(true, "Pagar Ahora")
     } else {
       log("WARNING: #button-pay not found")
     }
   } catch (err) {
     __started = false
     log({ initError: String(err), stack: err?.stack, data: err?.data })
-    setPayEnabled(false, "Formulario no listo")
+    setPayEnabled(false, "Error")
   }
 }
 
