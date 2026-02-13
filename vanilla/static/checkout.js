@@ -1,57 +1,56 @@
+// vanilla/static/checkout.js
 import { getCheckoutSession, createPayment, getPublicApiKey } from "./api.js"
 
 async function initCheckout() {
-
   const debugEl = document.getElementById("debug")
 
   const log = (x) => {
     const msg = typeof x === "string" ? x : JSON.stringify(x, null, 2)
-
     console.log(msg)
-
-    if (debugEl) {
-      debugEl.textContent += "\n" + msg
-    }
-
+    if (debugEl) debugEl.textContent += "\n" + msg
     window.__last_debug = msg
   }
 
   try {
-
     log("INIT CHECKOUT START")
 
-    // ✅ create checkout session
-    const { checkout_session: checkoutSession, country: countryCode } = await getCheckoutSession()
-
+    // 1) Create checkout session (backend)
+    const { checkout_session: checkoutSession, country: countryCode } =
+      await getCheckoutSession()
     log({ checkoutSession, countryCode })
 
-    // ✅ get api key
+    // 2) Get public key (backend)
     const publicApiKey = await getPublicApiKey()
-
     log("PUBLIC KEY OK")
 
-    // ✅ init SDK
+    // 3) Init SDK
     const yuno = await window.Yuno.initialize(publicApiKey)
-
     log("YUNO INITIALIZED")
 
     let isPaying = false
 
+    // 4) Start checkout in ELEMENT mode (avoid modal blockers)
     await yuno.startCheckout({
-
       checkoutSession,
       elementSelector: "#root",
       countryCode,
       language: "es",
 
-      // 🔥 MUITO importante
+      // keep it stable for demo
       showLoading: true,
       keepLoader: false,
 
+      // ✅ IMPORTANT: render inside the page, not a modal
+      renderMode: {
+        type: "element",
+        elementSelector: {
+          apmForm: "#form-element",
+          actionForm: "#action-form-element",
+        },
+      },
+
       async yunoCreatePayment(oneTimeToken) {
-
         try {
-
           if (isPaying) return
           isPaying = true
 
@@ -59,119 +58,72 @@ async function initCheckout() {
 
           const paymentResp = await createPayment({
             oneTimeToken,
-            checkoutSession
+            checkoutSession,
           })
 
-          log(paymentResp)
+          log({ createPaymentResponse: paymentResp })
 
-          /**
-           * 🔴 CRÍTICO:
-           * Só chamar continuePayment se o SDK pedir.
-           * Caso contrário → erro automático.
-           */
-
+          // Only continue if SDK explicitly requires it
           if (paymentResp?.sdk_action_required === true) {
-
-            log("CONTINUE PAYMENT")
-
+            log("SDK action required -> continuePayment()")
             yuno.continuePayment()
-
           } else {
-
-            log("NO CONTINUE PAYMENT NEEDED")
-
+            log("No SDK action required (skip continuePayment)")
           }
-
         } catch (err) {
-
-          log({
-            createPaymentError: String(err),
-            stack: err?.stack
-          })
-
+          isPaying = false
+          log({ createPaymentError: String(err), stack: err?.stack })
+          try { yuno.hideLoader() } catch (_) {}
         }
       },
 
+      yunoPaymentMethodSelected(data) {
+        log({ yunoPaymentMethodSelected: data })
+      },
+
       yunoPaymentResult(data) {
-
-        log({
-          PAYMENT_RESULT: data
-        })
-
+        log({ yunoPaymentResult: data })
+        isPaying = false
+        try { yuno.hideLoader() } catch (_) {}
       },
 
       yunoError(error) {
-
-        log({
-          YUNO_ERROR: error
-        })
-
-        alert("YUNO ERROR — veja debug")
-
-      }
-
+        log({ yunoError: error })
+        isPaying = false
+        try { yuno.hideLoader() } catch (_) {}
+      },
     })
 
-    /**
-     * ❌ NÃO usar mountCheckout no Full SDK
-     */
-    // yuno.mountCheckout()
-
-    log("CHECKOUT READY")
+    // ✅ In this flow, mountCheckout IS needed to render the payment methods list
+    yuno.mountCheckout()
+    log("CHECKOUT READY (mounted)")
 
     const payButton = document.querySelector("#button-pay")
-
     if (payButton) {
-
       payButton.addEventListener("click", () => {
-
         if (isPaying) return
-
-        log("START PAYMENT CLICK")
-
+        log("PAY BUTTON CLICK -> startPayment()")
         yuno.startPayment()
-
       })
-
+    } else {
+      log("WARNING: #button-pay not found")
     }
-
   } catch (err) {
-
-    log({
-      INIT_ERROR: String(err),
-      stack: err?.stack
-    })
-
+    const msg = { initError: String(err), stack: err?.stack }
+    console.log(msg)
+    if (debugEl) debugEl.textContent += "\n" + JSON.stringify(msg, null, 2)
   }
 }
 
-
-/**
- * Boot ultra seguro
- * (resolve MUITOS problemas de SDK)
- */
+// Boot (some environments don't fire yuno-sdk-ready reliably)
 function boot() {
-
-  if (window.Yuno?.initialize) {
-
-    initCheckout()
-
-  } else {
-
-    window.addEventListener(
-      "yuno-sdk-ready",
-      initCheckout,
-      { once: true }
-    )
-
+  const start = () => initCheckout()
+  if (window.Yuno?.initialize) start()
+  else {
+    window.addEventListener("yuno-sdk-ready", start, { once: true })
     setTimeout(() => {
-
-      if (window.Yuno?.initialize) {
-        initCheckout()
-      }
-
-    }, 2000)
-
+      if (window.Yuno?.initialize) start()
+    }, 1500)
   }
 }
 
