@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Yuno Checkout</title>
 
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter">
-  <link rel="stylesheet" href="../static/styles.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter" />
+  <link rel="stylesheet" href="../static/styles.css" />
 
   <style>
     #root{
@@ -15,10 +15,22 @@
       max-width: 500px;
       margin: 24px auto;
     }
-    #form-element, #action-form-element{
-      width: 100%;
-      max-width: 500px;
-      margin: 0 auto;
+    /* deixa o debug sempre visível mesmo se o SDK colocar overlay */
+    #debug{
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      max-height: 220px;
+      overflow: auto;
+      background: #111;
+      color: #0f0;
+      padding: 10px;
+      font-size: 12px;
+      border-radius: 8px;
+      z-index: 999999;
+      opacity: 0.92;
+      white-space: pre-wrap;
     }
   </style>
 </head>
@@ -26,16 +38,16 @@
 <body>
   <div id="loader" style="display:none;">Loading...</div>
 
-  <!-- ✅ Container principal do checkout -->
+  <!-- SDK monta a lista aqui -->
   <div id="root"></div>
 
-  <!-- ✅ Containers obrigatórios para renderMode: element -->
+  <!-- ✅ necessários se renderMode.type = "element" -->
   <div id="form-element"></div>
   <div id="action-form-element"></div>
 
   <button id="button-pay">Pagar Ahora</button>
 
-  <pre id="debug" style="white-space:pre-wrap; padding:12px; border:1px solid #ddd; margin-top:12px;"></pre>
+  <pre id="debug"></pre>
 
   <!-- SDK primeiro -->
   <script src="https://sdk-web.y.uno/v1.5/main.js"></script>
