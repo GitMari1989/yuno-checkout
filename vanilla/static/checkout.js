@@ -1,106 +1,177 @@
-// vanilla/static/checkout.js
 import { getCheckoutSession, createPayment, getPublicApiKey } from "./api.js"
 
 async function initCheckout() {
+
   const debugEl = document.getElementById("debug")
+
   const log = (x) => {
-    if (!debugEl) return
-    debugEl.textContent += `\n${typeof x === "string" ? x : JSON.stringify(x, null, 2)}`
+    const msg = typeof x === "string" ? x : JSON.stringify(x, null, 2)
+
+    console.log(msg)
+
+    if (debugEl) {
+      debugEl.textContent += "\n" + msg
+    }
+
+    window.__last_debug = msg
   }
 
   try {
-    log("initCheckout() start")
 
-    // 1) Get checkout session from merchant backend
+    log("INIT CHECKOUT START")
+
+    // ✅ create checkout session
     const { checkout_session: checkoutSession, country: countryCode } = await getCheckoutSession()
+
     log({ checkoutSession, countryCode })
 
-    // 2) Get public key from backend
+    // ✅ get api key
     const publicApiKey = await getPublicApiKey()
-    log({ publicApiKeyPrefix: String(publicApiKey || "").split("_")[0] })
 
-    // 3) Init SDK
+    log("PUBLIC KEY OK")
+
+    // ✅ init SDK
     const yuno = await window.Yuno.initialize(publicApiKey)
-    log("Yuno.initialize OK")
+
+    log("YUNO INITIALIZED")
 
     let isPaying = false
 
     await yuno.startCheckout({
+
       checkoutSession,
       elementSelector: "#root",
       countryCode,
       language: "es",
 
-      // Keep it simple + stable for demo
+      // 🔥 MUITO importante
       showLoading: true,
       keepLoader: false,
 
-      // Called when SDK created the one-time token
       async yunoCreatePayment(oneTimeToken) {
+
         try {
+
+          if (isPaying) return
           isPaying = true
-          log({ oneTimeTokenReceived: true })
 
-          const paymentResp = await createPayment({ oneTimeToken, checkoutSession })
-          log({ createPaymentResponse: paymentResp })
+          log("TOKEN RECEIVED")
 
-          // Only continue if SDK explicitly requires it
+          const paymentResp = await createPayment({
+            oneTimeToken,
+            checkoutSession
+          })
+
+          log(paymentResp)
+
+          /**
+           * 🔴 CRÍTICO:
+           * Só chamar continuePayment se o SDK pedir.
+           * Caso contrário → erro automático.
+           */
+
           if (paymentResp?.sdk_action_required === true) {
-            log("SDK action required -> continuePayment()")
+
+            log("CONTINUE PAYMENT")
+
             yuno.continuePayment()
+
           } else {
-            log("No SDK action required (skip continuePayment)")
+
+            log("NO CONTINUE PAYMENT NEEDED")
+
           }
-        } catch (e) {
-          log({ yunoCreatePaymentError: String(e), stack: e?.stack })
-          try { yuno.hideLoader() } catch (_) {}
+
+        } catch (err) {
+
+          log({
+            createPaymentError: String(err),
+            stack: err?.stack
+          })
+
         }
       },
 
-      yunoPaymentMethodSelected(data) {
-        log({ yunoPaymentMethodSelected: data })
-      },
-
       yunoPaymentResult(data) {
-        log({ yunoPaymentResult: data })
-        try { yuno.hideLoader() } catch (_) {}
+
+        log({
+          PAYMENT_RESULT: data
+        })
+
       },
 
       yunoError(error) {
-        log({ yunoError: error })
-        try { yuno.hideLoader() } catch (_) {}
-      },
+
+        log({
+          YUNO_ERROR: error
+        })
+
+        alert("YUNO ERROR — veja debug")
+
+      }
+
     })
 
-    yuno.mountCheckout()
-    log("mountCheckout() OK")
+    /**
+     * ❌ NÃO usar mountCheckout no Full SDK
+     */
+    // yuno.mountCheckout()
 
-    // Start payment only when user clicks
+    log("CHECKOUT READY")
+
     const payButton = document.querySelector("#button-pay")
+
     if (payButton) {
+
       payButton.addEventListener("click", () => {
+
         if (isPaying) return
-        log("Pay button clicked -> startPayment()")
+
+        log("START PAYMENT CLICK")
+
         yuno.startPayment()
+
       })
-    } else {
-      log("WARNING: #button-pay not found in HTML")
+
     }
-  } catch (e) {
-    const debugEl = document.getElementById("debug")
-    if (debugEl) debugEl.textContent += `\n${String(e)}\n${e?.stack || ""}`
+
+  } catch (err) {
+
+    log({
+      INIT_ERROR: String(err),
+      stack: err?.stack
+    })
+
   }
 }
 
-// Boot with fallback (some environments don't fire yuno-sdk-ready reliably)
+
+/**
+ * Boot ultra seguro
+ * (resolve MUITOS problemas de SDK)
+ */
 function boot() {
+
   if (window.Yuno?.initialize) {
+
     initCheckout()
+
   } else {
-    window.addEventListener("yuno-sdk-ready", initCheckout, { once: true })
+
+    window.addEventListener(
+      "yuno-sdk-ready",
+      initCheckout,
+      { once: true }
+    )
+
     setTimeout(() => {
-      if (window.Yuno?.initialize) initCheckout()
-    }, 1500)
+
+      if (window.Yuno?.initialize) {
+        initCheckout()
+      }
+
+    }, 2000)
+
   }
 }
 

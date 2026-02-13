@@ -7,25 +7,58 @@
   <link href="https://assets-global.website-files.com/6277c350218d32e9e5dc0380/627e9998bb4b6124743a90fc_favicon-yuno32x32.png" rel="shortcut icon" type="image/x-icon"/>
   <link href="https://assets-global.website-files.com/6277c350218d32e9e5dc0380/627e999c388c6cd2a87050e7_favicon-yuno256x256.png" rel="apple-touch-icon"/>
   <title>Yuno Checkout</title>
+
   <!-- default fonts -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter">
   <link rel="stylesheet" href="../static/styles.css">
+
+  <style>
+    /* Keep debug always visible even when SDK shows an overlay */
+    #debug {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      max-height: 40vh;
+      overflow: auto;
+      z-index: 2147483647;
+      background: rgba(0,0,0,0.85);
+      color: #00ff88;
+      padding: 12px;
+      font-size: 12px;
+      border-radius: 8px;
+      white-space: pre-wrap;
+      margin: 0;
+    }
+    #debug:empty::before {
+      content: "debug:";
+      color: #aaffcc;
+    }
+  </style>
 </head>
+
 <body>
-  <!-- create a component where the SDK will be mounted -->
+  <!-- Optional loader placeholder -->
   <div id="loader" style="display:none;">Loading...</div>
+
+  <!-- SDK mounts here -->
   <div id="root"></div>
+
+  <!-- Only used if renderMode 'element' is enabled (we may not use it, but keep placeholders) -->
   <div id="form-element"></div>
   <div id="action-form-element"></div>
 
-  <!-- merchant should create a button to start payment flow after the user has selected a payment method -->
+  <!-- Merchant button -->
   <button id="button-pay">Pagar Ahora</button>
 
-  <!-- your app use the checkout -->
-  <script type="module" src="../static/checkout.js"></script>
-  
-  <!-- include Yuno SDK -->
+  <!-- Debug overlay -->
+  <pre id="debug"></pre>
+
+  <!-- Include Yuno SDK FIRST -->
   <script src="https://sdk-web.y.uno/v1.5/main.js" defer></script>
-  <pre id="debug" style="white-space:pre-wrap;"></pre>
+
+  <!-- Then your checkout logic -->
+  <script type="module" src="../static/checkout.js" defer></script>
 </body>
 </html>
+
