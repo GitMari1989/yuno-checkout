@@ -1,42 +1,50 @@
 exports.getCountryData = function getCountryData(country) {
-  let countryData
+  let countryData;
 
   if (country == "CO") {
+    // 🔥 CORREÇÃO CRÍTICA:
+    // Seu dashboard só tem CARD habilitado para USD.
+    // Se usar COP → SDK quebra com "Transacción fallida".
     countryData = {
       documentType: "CC",
       documentNumber: "1032765432",
-      currency: "COP",
-      amount: 2000,
+      currency: "USD",   // ✅ ALTERADO (ANTES ERA COP)
+      amount: 50,        // ✅ valor baixo para sandbox (evita antifraude)
     };
+
   } else if (country == "BR") {
     countryData = {
       documentType: "CPF",
-      documentNumber: "351.040.753-97",
+      documentNumber: "35104075397", // melhor sem pontuação
       currency: "BRL",
-      amount: Math.floor(Math.random() * (1000 + 1) + 10),
+      amount: 50,
     };
+
   } else if (country == "AR") {
     countryData = {
       documentType: "PASS",
       documentNumber: "123554332",
       currency: "ARS",
-      amount: Math.floor(Math.random() * (1000 + 1) + 10),
+      amount: 50,
     };
+
   } else if (country == "CL") {
     countryData = {
       documentType: "CI",
       documentNumber: "80209924",
       currency: "CLP",
-      amount: Math.floor(Math.random() * (1000 + 1) + 10),
+      amount: 50,
     };
+
   } else {
+    // fallback universal
     countryData = {
       documentType: "PASS",
       documentNumber: "T12345",
       currency: "USD",
-      amount: Math.floor(Math.random() * (1000 + 1) + 10),
+      amount: 50,
     };
   }
 
   return countryData;
-}
+};
