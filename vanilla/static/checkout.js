@@ -11,6 +11,7 @@ async function initCheckout() {
 
   const debugEl = document.getElementById("debug")
   const payButton = document.getElementById("button-pay")
+  const rootEl = document.getElementById("root")
 
   const log = (x) => {
     const msg = typeof x === "string" ? x : JSON.stringify(x, null, 2)
@@ -19,33 +20,49 @@ async function initCheckout() {
     window.__last_debug = msg
   }
 
-  const setPayEnabled = (enabled) => {
+  const setPayEnabled = (enabled, label) => {
     if (!payButton) return
     payButton.disabled = !enabled
-    payButton.textContent = enabled ? "Pagar Ahora" : "Formulario no listo"
+    payButton.textContent = label || (enabled ? "Pagar Ahora" : "Formulario no listo")
   }
 
-  // começa travado
-  setPayEnabled(false)
+  setPayEnabled(false, "Formulario no listo")
 
   let isPaying = false
   let yuno = null
   let checkoutSession = null
   let countryCode = "CO"
 
-  // espera CVV aparecer no DOM (o id é dinâmico: cvv-<uuid>)
-  function waitForCvvElement({ timeoutMs = 12000 } = {}) {
+  /**
+   * ✅ Detecção mais robusta: considera que o SDK pode renderizar
+   * inputs e/ou iframes dentro do #root (muito comum).
+   */
+  const formLooksReady = () => {
+    if (!rootEl) return false
+
+    // 1) iframes (secure fields geralmente são iframes)
+    const iframes = rootEl.querySelectorAll("iframe")
+    if (iframes && iframes.length > 0) return true
+
+    // 2) inputs (alguns SDKs usam inputs normais)
+    const inputs = rootEl.querySelectorAll("input, select, textarea")
+    if (inputs && inputs.length > 0) return true
+
+    // 3) fallback: algum elemento com "card"/"cvv"/"security" no id/class
+    const hints = rootEl.querySelectorAll('[id*="cvv"],[id*="card"],[class*="cvv"],[class*="card"],[class*="security"]')
+    if (hints && hints.length > 0) return true
+
+    return false
+  }
+
+  function waitForFormReady({ timeoutMs = 12000 } = {}) {
     return new Promise((resolve) => {
-      const root = document.getElementById("root")
-      if (!root) return resolve(false)
-
-      const hasCvv = () => !!root.querySelector('[id^="cvv-"]')
-
-      if (hasCvv()) return resolve(true)
+      if (!rootEl) return resolve(false)
+      if (formLooksReady()) return resolve(true)
 
       const startedAt = Date.now()
       const obs = new MutationObserver(() => {
-        if (hasCvv()) {
+        if (formLooksReady()) {
           obs.disconnect()
           resolve(true)
         } else if (Date.now() - startedAt > timeoutMs) {
@@ -54,15 +71,16 @@ async function initCheckout() {
         }
       })
 
-      obs.observe(root, { childList: true, subtree: true })
+      obs.observe(rootEl, { childList: true, subtree: true })
 
-      // fallback timeout
       setTimeout(() => {
         try { obs.disconnect() } catch (_) {}
-        resolve(hasCvv())
+        resolve(formLooksReady())
       }, timeoutMs + 50)
     })
   }
+
+  let warnedOnce = false
 
   try {
     log("INIT CHECKOUT START")
@@ -80,7 +98,7 @@ async function initCheckout() {
       return
     }
 
-    // 2) Get public key (backend)
+    // 2) Get public key
     const publicApiKey = await getPublicApiKey()
     log({ publicApiKeyPrefix: String(publicApiKey || "").split("_")[0] })
 
@@ -101,7 +119,7 @@ async function initCheckout() {
     yuno = await window.Yuno.initialize(publicApiKey)
     log("YUNO INITIALIZED")
 
-    // 5) Start checkout in ELEMENT mode (render dentro do #root)
+    // 5) Start checkout
     await yuno.startCheckout({
       checkoutSession,
       elementSelector: "#root",
@@ -114,7 +132,7 @@ async function initCheckout() {
         try {
           if (isPaying) return
           isPaying = true
-          setPayEnabled(false)
+          setPayEnabled(false, "Procesando...")
 
           log("yunoCreatePayment CALLED (token received)")
           log({ oneTimeTokenPreview: String(oneTimeToken || "").slice(0, 10) + "..." })
@@ -132,17 +150,30 @@ async function initCheckout() {
           log({ createPaymentError: String(err), stack: err?.stack, data: err?.data })
           try { yuno.hideLoader() } catch (_) {}
           isPaying = false
-          setPayEnabled(true)
+          setPayEnabled(true, "Pagar Ahora")
         }
       },
 
       yunoPaymentMethodSelected(data) {
         log({ yunoPaymentMethodSelected: data })
-        // quando selecionar método, aguarda o CVV/form existir para liberar o botão
+
+        // Quando seleciona método, espera o form renderizar e então habilita
         ;(async () => {
-          const ok = await waitForCvvElement({ timeoutMs: 12000 })
-          if (!ok) log("WARNING: CVV element not found after selection (still waiting).")
-          setPayEnabled(ok)
+          warnedOnce = false
+          setPayEnabled(false, "Cargando formulario...")
+
+          const ok = await waitForFormReady({ timeoutMs: 15000 })
+          if (!ok) {
+            if (!warnedOnce) {
+              warnedOnce = true
+              log("WARNING: Form fields not found after selection (still waiting).")
+            }
+            // mantém disabled, mas deixa o texto claro
+            setPayEnabled(false, "Formulario no listo")
+            return
+          }
+
+          setPayEnabled(true, "Pagar Ahora")
         })()
       },
 
@@ -150,25 +181,24 @@ async function initCheckout() {
         log({ yunoPaymentResult: data })
         isPaying = false
         try { yuno.hideLoader() } catch (_) {}
-        // pode liberar novamente se quiser tentar de novo
-        setPayEnabled(true)
+        setPayEnabled(true, "Pagar Ahora")
       },
 
       yunoError(error) {
         log({ yunoError: error })
         isPaying = false
         try { yuno.hideLoader() } catch (_) {}
-        // reabilita para nova tentativa
-        setPayEnabled(true)
+        // deixa tentar de novo
+        setPayEnabled(true, "Pagar Ahora")
       },
     })
 
-    // 6) Mount list/forms (necessário no seu caso para aparecer "Tarjeta")
+    // 6) Mount (no seu caso é necessário pra aparecer Tarjeta)
     if (typeof yuno.mountCheckout === "function") {
       yuno.mountCheckout()
       log("CHECKOUT READY (mounted)")
     } else {
-      log("WARNING: mountCheckout not available in this SDK version")
+      log("WARNING: mountCheckout not available")
     }
 
     // 7) Pay button
@@ -176,27 +206,31 @@ async function initCheckout() {
       payButton.addEventListener("click", async () => {
         if (isPaying) return
 
-        // ✅ proteção extra: só deixa pagar se o CVV existir
-        const root = document.getElementById("root")
-        const hasCvv = !!root?.querySelector('[id^="cvv-"]')
-        if (!hasCvv) {
-          log("BLOCKED: CVV element still not in DOM. Wait form to render.")
-          setPayEnabled(false)
-          const ok = await waitForCvvElement({ timeoutMs: 8000 })
-          setPayEnabled(ok)
-          return
+        // Proteção: garante que o form existe antes de startPayment
+        if (!formLooksReady()) {
+          setPayEnabled(false, "Cargando formulario...")
+          const ok = await waitForFormReady({ timeoutMs: 8000 })
+          if (!ok) {
+            log("BLOCKED: Form still not ready in DOM. Not calling startPayment().")
+            setPayEnabled(false, "Formulario no listo")
+            return
+          }
+          setPayEnabled(true, "Pagar Ahora")
         }
 
         log("PAY BUTTON CLICK -> yuno.startPayment()")
-        setPayEnabled(false)
+        setPayEnabled(false, "Procesando...")
         yuno.startPayment()
       })
+
       log("Pay button listener attached")
+    } else {
+      log("WARNING: #button-pay not found")
     }
   } catch (err) {
     __started = false
     log({ initError: String(err), stack: err?.stack, data: err?.data })
-    setPayEnabled(false)
+    setPayEnabled(false, "Formulario no listo")
   }
 }
 
