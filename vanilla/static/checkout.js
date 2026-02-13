@@ -25,12 +25,23 @@ async function initCheckout() {
     payButton.style.cursor = enabled ? "pointer" : "not-allowed"
   }
 
+  // Espera um elemento existir no DOM (ex: [id^="cvv-"])
+  const waitForElement = async (selector, { timeoutMs = 4000, intervalMs = 100 } = {}) => {
+    const start = Date.now()
+    while (Date.now() - start < timeoutMs) {
+      const el = document.querySelector(selector)
+      if (el) return el
+      await new Promise((r) => setTimeout(r, intervalMs))
+    }
+    return null
+  }
+
   let isPaying = false
   let methodSelected = false
   let yuno = null
 
   try {
-    setPayEnabled(false, "Selecione un método")
+    setPayEnabled(false, "Seleccione Tarjeta")
 
     log("INIT CHECKOUT START")
 
@@ -71,7 +82,6 @@ async function initCheckout() {
     yuno = await window.Yuno.initialize(publicApiKey)
     log("YUNO INITIALIZED")
 
-    // helper: always re-render methods after fail/result
     const safeRemount = () => {
       try {
         if (typeof yuno?.mountCheckout === "function") {
@@ -83,9 +93,7 @@ async function initCheckout() {
       }
     }
 
-    // 5) Start checkout (ELEMENT mode, because you want methods visible in-page)
-    log("Calling yuno.startCheckout(...)")
-
+    // 5) Start checkout (ELEMENT mode)
     await yuno.startCheckout({
       checkoutSession,
       elementSelector: "#root",
@@ -95,12 +103,10 @@ async function initCheckout() {
       showLoading: true,
       keepLoader: false,
 
-      // IMPORTANT: keep inside page
       renderMode: { type: "element" },
 
       async yunoCreatePayment(oneTimeToken) {
         try {
-          // Extra guard: if user never selected a method, do nothing
           if (!methodSelected) {
             log("yunoCreatePayment called but no method selected -> ignoring")
             return
@@ -116,7 +122,6 @@ async function initCheckout() {
           const paymentResp = await createPayment({ oneTimeToken, checkoutSession })
           log({ createPaymentResponse: paymentResp })
 
-          // Only continue if API says SDK action is required
           if (paymentResp?.sdk_action_required === true) {
             log("SDK action required -> continuePayment()")
             yuno.continuePayment()
@@ -128,14 +133,30 @@ async function initCheckout() {
           isPaying = false
           setPayEnabled(true, "Pagar Ahora")
           try { yuno.hideLoader() } catch (_) {}
-          // bring UI back
           safeRemount()
         }
       },
 
-      yunoPaymentMethodSelected(data) {
+      async yunoPaymentMethodSelected(data) {
         methodSelected = true
         log({ yunoPaymentMethodSelected: data })
+
+        // 🔥 CRÍTICO: esperar o CVV aparecer no DOM ANTES de habilitar o botão
+        setPayEnabled(false, "Cargando formulario...")
+
+        // Remonta para garantir que o form foi renderizado
+        safeRemount()
+
+        // Espera qualquer elemento cujo id começa com "cvv-"
+        const cvvEl = await waitForElement('[id^="cvv-"]', { timeoutMs: 5000, intervalMs: 100 })
+
+        if (!cvvEl) {
+          log("WARNING: CVV element not found after selection (still waiting).")
+          setPayEnabled(false, "Formulario no listo")
+          return
+        }
+
+        log({ cvvElementFound: cvvEl.id })
         setPayEnabled(true, "Pagar Ahora")
       },
 
@@ -144,7 +165,6 @@ async function initCheckout() {
         isPaying = false
         setPayEnabled(true, "Pagar Ahora")
         try { yuno.hideLoader() } catch (_) {}
-        // if SDK clears UI after result, re-render
         safeRemount()
       },
 
@@ -153,12 +173,11 @@ async function initCheckout() {
         isPaying = false
         setPayEnabled(true, "Pagar Ahora")
         try { yuno.hideLoader() } catch (_) {}
-        // CRITICAL: recover UI so it doesn't stay blank
         safeRemount()
       },
     })
 
-    // For element mode, mount is needed to render methods list/form
+    // mount to render the method list
     if (typeof yuno.mountCheckout === "function") {
       yuno.mountCheckout()
       log("CHECKOUT READY (mounted)")
@@ -169,29 +188,39 @@ async function initCheckout() {
     // 6) Pay button
     if (payButton) {
       payButton.addEventListener("click", async () => {
-        log("PAY BUTTON CLICK")
+        log("PAY BUTTON CLICK -> startPayment()")
 
         if (!methodSelected) {
           log("Blocked: no payment method selected yet")
           return
         }
-
         if (isPaying) {
           log("Blocked: already paying")
           return
         }
 
+        // 🔥 Guard extra: se CVV não existe, remonta e espera
+        const cvvNow = document.querySelector('[id^="cvv-"]')
+        if (!cvvNow) {
+          log("CVV not in DOM at click time -> remount + wait")
+          safeRemount()
+          const cvvEl = await waitForElement('[id^="cvv-"]', { timeoutMs: 5000, intervalMs: 100 })
+          if (!cvvEl) {
+            log("ERROR: CVV still missing -> abort startPayment")
+            return
+          }
+          log({ cvvElementFoundAtClick: cvvEl.id })
+        }
+
         try {
           isPaying = true
           setPayEnabled(false, "Procesando...")
-          log("Calling yuno.startPayment()")
           await yuno.startPayment()
-          log("yuno.startPayment() resolved (waiting callbacks)")
+          log("yuno.startPayment() called")
         } catch (e) {
           log({ startPaymentError: String(e) })
           isPaying = false
           setPayEnabled(true, "Pagar Ahora")
-          // recover UI
           try { yuno.hideLoader() } catch (_) {}
           safeRemount()
         }
@@ -211,10 +240,8 @@ async function initCheckout() {
 // Boot seguro
 function boot() {
   const start = () => initCheckout()
-
-  if (window.Yuno?.initialize) {
-    start()
-  } else {
+  if (window.Yuno?.initialize) start()
+  else {
     window.addEventListener("yuno-sdk-ready", start, { once: true })
     setTimeout(() => {
       if (window.Yuno?.initialize) start()
