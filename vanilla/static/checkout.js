@@ -1,5 +1,5 @@
 // vanilla/static/checkout.js
-import { getCheckoutSession, getPaymentMethods, createPayment, getPublicApiKey } from "./api.js"
+import { getCheckoutSession, createPayment, getPublicApiKey } from "./api.js"
 
 let __started = false
 
@@ -16,86 +16,74 @@ async function initCheckout() {
   }
 
   let isPaying = false
-  let allowPayment = false
 
   try {
     log("INIT CHECKOUT START")
 
-    // 1) Create checkout session
+    // 1) Create checkout session (backend)
     const sessionResp = await getCheckoutSession()
     const checkoutSession = sessionResp?.checkout_session
-    const countryCode = sessionResp?.country
+    const countryCode = sessionResp?.country || "CO"
 
     log({ checkoutSession, countryCode, sessionResp })
 
-    if (!checkoutSession || !countryCode) {
-      log("ERROR: Missing checkout_session or country in /checkout/sessions response")
+    if (!checkoutSession) {
+      log("ERROR: Missing checkout_session in /checkout/sessions response")
       __started = false
       return
     }
 
-    // 2) Validate payment methods exist for this checkout session BEFORE calling the SDK
-    //    If this is empty/invalid, the SDK will often show "Transacción fallida" overlay.
-    let pmResp = null
-    try {
-      pmResp = await getPaymentMethods(checkoutSession)
-      log({ paymentMethodsResponse: pmResp })
-    } catch (e) {
-      log({ paymentMethodsFetchError: String(e), data: e?.data })
-      log("STOPPING BEFORE SDK (payment methods endpoint failed).")
-      __started = false
-      return
-    }
-
-    // Heuristic: if API returns empty list/array or no obvious methods, stop and show debug
-    const methods =
-      pmResp?.payment_methods ||
-      pmResp?.paymentMethods ||
-      pmResp?.data ||
-      (Array.isArray(pmResp) ? pmResp : null)
-
-    const methodsCount = Array.isArray(methods) ? methods.length : null
-    log({ methodsCount })
-
-    if (methodsCount === 0) {
-      log("STOPPING BEFORE SDK: Checkout session has ZERO payment methods. Enable at least Card in Yuno dashboard for this country.")
-      __started = false
-      return
-    }
-
-    // 3) Get public key
+    // 2) Get public key (backend)
     const publicApiKey = await getPublicApiKey()
     log({ publicApiKeyPrefix: String(publicApiKey || "").split("_")[0] })
 
-    // 4) Init SDK
+    if (!publicApiKey) {
+      log("ERROR: Missing publicApiKey from /public-api-key")
+      __started = false
+      return
+    }
+
+    // 3) Init SDK
+    if (!window.Yuno?.initialize) {
+      log("ERROR: window.Yuno.initialize not available (SDK not loaded)")
+      __started = false
+      return
+    }
+
     const yuno = await window.Yuno.initialize(publicApiKey)
     log("YUNO INITIALIZED")
 
-    // 5) Start checkout (default render mode)
+    // 4) Start checkout (MODAL mode = mais estável)
+    //    Obs: NÃO chama startPayment em nenhum momento.
+    log("Calling yuno.startCheckout(...)")
+
     await yuno.startCheckout({
       checkoutSession,
       elementSelector: "#root",
       countryCode,
       language: "es",
+
       showLoading: true,
       keepLoader: false,
 
+      // Força modal (evita problemas de container/element mode)
+      renderMode: {
+        type: "modal",
+      },
+
+      // Só é chamado quando o SDK realmente gerar token (depois do fluxo)
       async yunoCreatePayment(oneTimeToken) {
         try {
-          // ✅ only pay after click
-          if (!allowPayment) {
-            log("yunoCreatePayment called BEFORE click -> ignoring token")
-            return
-          }
-
           if (isPaying) return
           isPaying = true
 
-          log({ oneTimeTokenReceived: true })
+          log("yunoCreatePayment CALLED (token received)")
+          log({ oneTimeTokenPreview: String(oneTimeToken || "").slice(0, 10) + "..." })
 
           const paymentResp = await createPayment({ oneTimeToken, checkoutSession })
           log({ createPaymentResponse: paymentResp })
 
+          // Importante: só chamar continuePayment se o SDK pedir isso explicitamente
           if (paymentResp?.sdk_action_required === true) {
             log("SDK action required -> continuePayment()")
             yuno.continuePayment()
@@ -103,10 +91,9 @@ async function initCheckout() {
             log("No SDK action required (skip continuePayment)")
           }
         } catch (err) {
-          isPaying = false
-          allowPayment = false
-          log({ createPaymentError: String(err), stack: err?.stack, data: err?.data })
+          log({ createPaymentError: String(err), stack: err?.stack })
           try { yuno.hideLoader() } catch (_) {}
+          isPaying = false
         }
       },
 
@@ -117,42 +104,43 @@ async function initCheckout() {
       yunoPaymentResult(data) {
         log({ yunoPaymentResult: data })
         isPaying = false
-        allowPayment = false
         try { yuno.hideLoader() } catch (_) {}
       },
 
       yunoError(error) {
         log({ yunoError: error })
         isPaying = false
-        allowPayment = false
         try { yuno.hideLoader() } catch (_) {}
       },
     })
 
+    // 5) Render list of methods (se o SDK exigir)
     if (typeof yuno.mountCheckout === "function") {
       yuno.mountCheckout()
       log("CHECKOUT READY (mounted)")
     } else {
-      log("WARNING: mountCheckout not available")
+      log("WARNING: mountCheckout not available in this SDK version")
     }
 
+    // 6) Pay button
     const payButton = document.querySelector("#button-pay")
     if (payButton) {
       payButton.addEventListener("click", () => {
         if (isPaying) return
-        allowPayment = true
-        log("PAY BUTTON CLICK -> startPayment()")
+        log("PAY BUTTON CLICK -> yuno.startPayment()")
         yuno.startPayment()
       })
+      log("Pay button listener attached")
     } else {
       log("WARNING: #button-pay not found")
     }
   } catch (err) {
     __started = false
-    log({ initError: String(err), stack: err?.stack, data: err?.data })
+    log({ initError: String(err), stack: err?.stack })
   }
 }
 
+// Boot seguro (evita init duplicado)
 function boot() {
   const start = () => initCheckout()
 
@@ -162,7 +150,7 @@ function boot() {
     window.addEventListener("yuno-sdk-ready", start, { once: true })
     setTimeout(() => {
       if (window.Yuno?.initialize) start()
-    }, 1500)
+    }, 2000)
   }
 }
 
