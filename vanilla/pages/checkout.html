@@ -5,95 +5,89 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Yuno Checkout</title>
 
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter">
-  <link rel="stylesheet" href="../static/styles.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter" />
+  <link rel="stylesheet" href="../static/styles.css" />
 
   <style>
     body {
       font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
       margin: 0;
-      padding: 0 0 260px 0; /* espaço pro botão + debug fixos */
-      background: #f6f7f9;
+      padding: 24px 16px 120px; /* espaço p/ debug */
+      background: #f6f7fb;
     }
 
-    #root{
-      min-height: 600px;
+    .container {
       width: 100%;
       max-width: 520px;
-      margin: 24px auto;
+      margin: 0 auto;
+    }
+
+    #root {
+      min-height: 640px;
+      width: 100%;
       background: #fff;
       border-radius: 12px;
-      border: 1px solid #e9e9e9;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+      overflow: hidden;
     }
 
-    /* Containers do element mode */
-    #form-element, #action-form-element{
+    #button-pay {
       width: 100%;
-      max-width: 520px;
-      margin: 12px auto;
-    }
-
-    /* Botão SEMPRE clicável */
-    #button-pay{
-      position: fixed;
-      left: 50%;
-      transform: translateX(-50%);
-      bottom: 210px;
-      width: min(520px, calc(100% - 32px));
+      margin-top: 16px;
       height: 52px;
-      border-radius: 10px;
+      border-radius: 12px;
       border: 0;
-      font-size: 18px;
       cursor: pointer;
-      z-index: 999999; /* acima de qualquer overlay leve */
+      font-size: 16px;
     }
 
-    /* Debug fixo embaixo, NÃO bloqueia clique */
-    #debug{
+    /* DEBUG: fica embaixo, não cobre clique */
+    details#debug-panel {
       position: fixed;
-      left: 16px;
-      right: 16px;
-      bottom: 16px;
-      max-height: 170px;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      z-index: 9999;
+      background: rgba(20, 20, 20, 0.95);
+      color: #00ff66;
+      border-radius: 12px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+      overflow: hidden;
+    }
+
+    details#debug-panel summary {
+      cursor: pointer;
+      padding: 10px 14px;
+      user-select: none;
+      font-weight: 600;
+      color: #c7ffd9;
+      outline: none;
+    }
+
+    pre#debug {
+      margin: 0;
+      padding: 12px 14px;
+      max-height: 220px;
       overflow: auto;
       white-space: pre-wrap;
-      padding: 12px;
-      border-radius: 10px;
-      border: 1px solid #222;
-      background: rgba(0,0,0,0.92);
-      color: #35ff6a;
-      z-index: 10;
-      pointer-events: none; /* <- CRÍTICO: não bloqueia clique */
-    }
-
-    /* Loader local (se usar) */
-    #loader{
-      display:none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.25);
-      z-index: 999998;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-size: 18px;
+      word-break: break-word;
+      border-top: 1px solid rgba(255,255,255,0.12);
     }
   </style>
 </head>
 
 <body>
-  <div id="loader">Loading...</div>
+  <div class="container">
+    <div id="root"></div>
 
-  <!-- FULL CHECKOUT container -->
-  <div id="root"></div>
+    <button id="button-pay" type="button">Pagar Ahora</button>
+  </div>
 
-  <!-- Element mode containers -->
-  <div id="form-element"></div>
-  <div id="action-form-element"></div>
-
-  <button id="button-pay" type="button">Pagar Ahora</button>
-
-  <pre id="debug"></pre>
+  <!-- Debug colapsável (não cobre o botão) -->
+  <details id="debug-panel" open>
+    <summary>Debug (clique para abrir/fechar)</summary>
+    <pre id="debug"></pre>
+  </details>
 
   <!-- SDK primeiro -->
   <script src="https://sdk-web.y.uno/v1.5/main.js"></script>
