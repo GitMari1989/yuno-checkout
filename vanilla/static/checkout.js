@@ -100,12 +100,7 @@ async function initCheckout() {
     /**
      * Use external SDKs buttons like PayPal, Paga con Rappi
      */
-    externalPaymentButtons: {
-      paypal: {
-        elementSelector: '#paypal',
-      }
-    },
-    /**
+       /**
      * calback is called when one time token is created,
      * merchant should create payment back to back
      * @param { oneTimeToken: string } data 
@@ -165,4 +160,8 @@ async function initCheckout() {
   })
 }
 
-window.addEventListener('yuno-sdk-ready', initCheckout)
+if (window.Yuno?.initialize) {
+  initCheckout()
+} else {
+  window.addEventListener('yuno-sdk-ready', initCheckout)
+}
