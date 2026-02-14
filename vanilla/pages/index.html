@@ -4,20 +4,73 @@
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
   <link href="https://assets-global.website-files.com/6277c350218d32e9e5dc0380/627e9998bb4b6124743a90fc_favicon-yuno32x32.png" rel="shortcut icon" type="image/x-icon"/>
   <link href="https://assets-global.website-files.com/6277c350218d32e9e5dc0380/627e999c388c6cd2a87050e7_favicon-yuno256x256.png" rel="apple-touch-icon"/>
-  <title>Yuno Checkout</title>
-  <!-- default fonts -->
+
+  <title>Yunique Fashion Store - Checkout</title>
+
   <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter">
   <link rel="stylesheet" href="../static/styles.css">
+
+  <style>
+    body {
+      font-family: Inter, sans-serif;
+      margin: 0;
+      padding: 24px 16px 40px;
+      background: #f6f7fb;
+      max-width: 520px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .store-title {
+      text-align: center;
+      font-size: 22px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .pay-label {
+      font-size: 14px;
+      margin: 16px 0 8px;
+      color: #555;
+    }
+
+    #button-pay {
+      width: 100%;
+      height: 52px;
+      border-radius: 12px;
+      border: 0;
+      margin-top: 16px;
+      font-size: 16px;
+      background: #111;
+      color: #fff;
+      cursor: pointer;
+    }
+
+    #button-pay:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  </style>
 </head>
+
 <body>
-  <!-- create a component where the SDK will be mounted -->
+
+  <!-- Nome da loja -->
+  <h1 class="store-title">Yunique Fashion Store</h1>
+
+  <!-- Texto antes dos métodos -->
+  <p class="pay-label">Pague con:</p>
+
+  <!-- SDK monta aqui -->
   <div id="root"></div>
+
   <div id="form-element"></div>
   <div id="action-form-element"></div>
 
-  <!-- merchant should create a button to start payment flow after the user has selected a payment method -->
+  <!-- Botão de pagamento -->
   <button id="button-pay">Pagar Ahora</button>
 
   <loader-message id="loader"></loader-message>
@@ -25,5 +78,6 @@
   <script src="../static/loader.js"></script>
   <script type="module" src="../static/checkout.js"></script>
   <script src="https://sdk-web.y.uno/v1.5/main.js" defer></script>
+
 </body>
 </html>
