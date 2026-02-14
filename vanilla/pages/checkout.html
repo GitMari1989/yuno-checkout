@@ -13,7 +13,7 @@
     body {
       font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
       margin: 0;
-      padding: 24px 16px;
+      padding: 24px 16px 40px;
       background: #f6f7fb;
     }
 
@@ -23,27 +23,17 @@
       margin: 0 auto;
     }
 
-    .store-header {
+    .store-title {
       text-align: center;
-      margin-bottom: 24px;
-    }
-
-    .store-header h1 {
-      margin: 0;
-      font-size: 24px;
-      font-weight: 700;
-    }
-
-    .store-header p {
-      margin: 4px 0 0;
-      font-size: 14px;
-      color: #666;
-    }
-
-    .payment-label {
-      font-size: 16px;
+      font-size: 22px;
       font-weight: 600;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
+    }
+
+    .pay-label {
+      font-size: 14px;
+      margin: 12px 0 8px;
+      color: #555;
     }
 
     #root {
@@ -63,6 +53,8 @@
       border: 0;
       cursor: pointer;
       font-size: 16px;
+      background: #111;
+      color: #fff;
     }
 
     #button-pay:disabled {
@@ -73,32 +65,28 @@
 </head>
 
 <body>
-<h1 style="color:red;">TESTE 123</h1>
   <div class="container">
 
-    <!-- Nome da Loja -->
-    <div class="store-header">
-      <h1>Yunique</h1>
-      <p>Fashion Store</p>
-    </div>
+    <!-- Nome da loja -->
+    <h1 class="store-title">Yunique Fashion Store</h1>
 
-    <!-- Texto antes do método de pagamento -->
-    <div class="payment-label">
-      Pague con:
-    </div>
+    <!-- Texto antes da seleção de pagamento -->
+    <p class="pay-label">Pague con:</p>
 
-    <!-- SDK renderiza aqui -->
+    <!-- Aqui o SDK monta o checkout -->
     <div id="root"></div>
 
+    <!-- Botão -->
     <button id="button-pay" type="button" disabled>
       Pagar Ahora
     </button>
+
   </div>
 
-  <!-- SDK primeiro -->
+  <!-- SDK -->
   <script src="https://sdk-web.y.uno/v1.5/main.js"></script>
 
-  <!-- Seu código -->
+  <!-- Seu script -->
   <script type="module" src="/static/checkout.js"></script>
 </body>
 </html>
