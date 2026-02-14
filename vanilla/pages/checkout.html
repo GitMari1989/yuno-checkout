@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Yuno Checkout</title>
+  <title>Yunique Fashion Store - Checkout</title>
 
   <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter" />
   <link rel="stylesheet" href="/static/styles.css" />
@@ -21,6 +21,29 @@
       width: 100%;
       max-width: 520px;
       margin: 0 auto;
+    }
+
+    .store-header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .store-header h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .store-header p {
+      margin: 4px 0 0;
+      font-size: 14px;
+      color: #666;
+    }
+
+    .payment-label {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
     }
 
     #root {
@@ -51,14 +74,30 @@
 
 <body>
   <div class="container">
+
+    <!-- Nome da Loja -->
+    <div class="store-header">
+      <h1>Yunique</h1>
+      <p>Fashion Store</p>
+    </div>
+
+    <!-- Texto antes do método de pagamento -->
+    <div class="payment-label">
+      Pague con:
+    </div>
+
+    <!-- SDK renderiza aqui -->
     <div id="root"></div>
-    <button id="button-pay" type="button" disabled>Pagar Ahora</button>
+
+    <button id="button-pay" type="button" disabled>
+      Pagar Ahora
+    </button>
   </div>
 
   <!-- SDK primeiro -->
   <script src="https://sdk-web.y.uno/v1.5/main.js"></script>
 
-  <!-- Depois seu código -->
+  <!-- Seu código -->
   <script type="module" src="/static/checkout.js"></script>
 </body>
 </html>
